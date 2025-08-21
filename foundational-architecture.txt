@@ -1,0 +1,95 @@
+# APStat Chain (PoK-EDU): Foundational Architecture Document
+
+## Project Overview
+A decentralized, browser-native Proof-of-Knowledge (PoK) blockchain platform for delivering AP Statistics curriculum through emergent social consensus. Students mine blocks via question-solving transactions, validated by peer attestation quorums rather than centralized keys, fostering collaborative knowledge construction. Architecture prioritizes monolithic in-browser execution to evade firewalls and enable offline operation, with QR-based synchronization for chain growth and curriculum distribution. Decision logic: Shift from mobile-QR focus in legacy project to laptop-optimized offline-first design minimizes network dependencies, ensuring viability in restricted school environments while preserving simulation-validated consensus (>90% accuracy, ~6-day latency in 40-node networks). Migration from old repo curates 8 essential files (total ~1.7MB reduced to ~70KB post-conversion) for logic ports, data transformation, and reference: final_simulation.rkt (7KB sim for Phase 1 algos), curriculum.json (1.6MB bank for Phase 2 EDN), backend/app.py (14.6KB rep/consensus for Phase 1 extraction), ADR-012/028.md (10.7KB combined for architectural rationale), app_state.json (325B schema example for db), allUnitsData.js (92KB rendering patterns for Phase 2), simulation_results.md (2.3KB benchmarks for Phase 5). Exclusions (e.g., pok_app.html, quiz_renderer.html, Flask deps) eliminate mobile/server elements, focusing on serverless CLJS ports. Extensibility vectors include multi-subject generalization and federated networks, but MVP scopes to AP Stats for pedagogical fidelity.
+
+## Core Technical Requirements
+### Non-Negotiable Constraints
+- Serverless execution: All logic, state, and rendering confined to client-side JavaScript runtime, eliminating CORS and external dependencies post-bundle.
+- Firewall resilience: No runtime network calls (e.g., avoid WebSockets, APIs); synchronization via physical QR transfers or file imports.
+- Performance bounds: Bundle <5MB (advanced compilation with tree-shaking); operations <100ms on 4GB RAM/Dual-core CPU (e.g., Celeron); initial lesson load ~6KB via EDN modularity (96% reduction from 1.6MB JSON).
+- Offline primacy: Full PoK mining, attestation, and rendering functional without connectivity; persistence via IndexedDB for chain/mempool/curriculum state.
+- Browser baseline: Chrome 90+ compatibility, leveraging Web APIs (Camera for QR, Crypto for SHA-256) without extensions.
+
+Decision logic: Constraints derive from school hardware/network limitations; offline-first enables QR-seeded classrooms, balancing decentralization with practicality—e.g., QR chunking limits (3KB max) inform delta sync optimizations (<500 bytes) to avoid multi-scan fatigue while ensuring integrity via Merkle roots. Migration selections (e.g., exclude mobile QR pairing from pok_app.html) reinforce serverless focus, reusing only reference code like app.py reputation snippets for CLJS ports.
+
+### Success Metrics
+- Consensus fidelity: >90% accuracy, <7-day latency in simulated 40-node/180-day runs, matching Racket benchmarks from final_simulation.rkt and simulation_results.md.
+- Load efficiency: 96% reduction per lesson (EDN lazy-load from curriculum.json conversion); render <100ms via pre-computed stats.
+- Sync payload: <500 bytes for deltas (new txns/blocks + Merkle roots), verifiable locally.
+- Educational alignment: Reputation rewards emphasize accuracy-conditional thought leadership (bonuses for minority-correct attestations), with participation tracking decoupled to encourage attempts without gaming.
+
+Decision logic: Metrics prioritize simulation parity for validation (e.g., extract archetypes/thresholds from final_simulation.rkt for CLJS sims), while educational ones (e.g., bonus only for eventual correctness) derive from AP Stats emphasis on precision over speed, preventing random guessing while rewarding critical consensus-breaking—aligned with extracted rep logic from app.py (prop_at_time <0.5 and final_hash match).
+
+## Technology Stack
+ClojureScript (transpiles to optimized JS) for immutable, functional logic suited to blockchain state; Reagent/Re-frame for reactive UI/state with event/subscription model scaling to multi-node sims; Transit for compact serialization in QR payloads; Hodgepodge for IndexedDB persistence; Vega-Lite (via NPM) for declarative chart rendering with pre-computation hooks; qrcode/jsqr for sync; Crypto-JS for hashing. Versions: CLJS 1.11.60, Re-frame 1.4.0, Vega-Lite 5.6.0. No additional deps to minimize bundle.
+
+Decision logic: Lisp heritage (from Racket prototype in final_simulation.rkt) excels for consensus algos (immutability reduces state bugs); Re-frame over pure Reagent for handling complex subscriptions (e.g., real-time rep updates) without boilerplate; Vega-Lite chosen for stats-native specs (e.g., regression transforms) over Chart.js to eliminate hacks, with pre-compute for 86% perf gains on low-power; hybrid detects via hardwareConcurrency for adaptability; IndexedDB over localStorage for structured queries (e.g., by timestamp), enabling efficient offline merges—schemas extracted from app.py/app_state.json inform db design (e.g., Node map with pubkey key-path).
+
+## Project Structure
+Monolithic SPA bundle: src/pok/ namespaces segregate concerns (core for init, blockchain for PoK/consensus/rep, curriculum for EDN load/render, sync for QR/delta, ui for quiz/dashboard); resources/edn/ for modular curriculum (index + 77 lesson files from curriculum.json conversion); public/index.html deploy. No backend—teacher tools in separate Python repo. Migration: Create analysis/racket-reference/ for final_simulation.rkt copy; docs/architecture/legacy-adrs/ for ADR-012/028.md; docs/performance/baseline/ for simulation_results.md; extract patterns from allUnitsData.js to curriculum/renderer.cljs; transform curriculum.json via curriculum_to_edn_flexible.py to resources/edn/.
+
+Decision logic: Namespace isolation mirrors original components (e.g., consensus.cljs ports Racket from final_simulation.rkt directly) for maintainability; EDN bundling enables lazy requires, reducing initial memory footprint; external tools deprioritize in-app complexity, focusing app on student PoK flow—migration actions (e.g., copy app.py rep functions to docs/algorithm-ports.md) provide reference without legacy bloat, excluding mobile HTML like quiz_renderer.html.
+
+## Implementation Phases
+### Phase 1: Core Blockchain Logic
+Port Racket/Python algos as pure fns for REPL validation, integrating with Re-frame for state. Reputation: Time-windowed proportion replay (strict < timestamp filter for priors excluding self, prop = max_dist / total prior to current) with accuracy-conditional bonuses (2.5x if prop <0.5 and matches final hash, clamped [0.1,10.0]). Consensus: Dynamic quorum (max(3, floor(0.3 * active_nodes))) via frequency dist of hashes. State: Re-frame db with nodes (pubkey → struct incl. archetype/rep/mempool/chain), initial default-db for offline bootstrap.
+
+Decision logic: Reputation refinement rewards "correct thought leadership" (first accurate in minority) over mere initiative, per codebase (app.py:215 filter on final_hash)—prevents gaming while encouraging precision; strict < excludes self for true prior-prop calc (enables 1st correct bonus at 0.0), with pubkey stable-sort for identical timestamps; quorum adaptive to network size balances small-class speed with large-group robustness—ports extract constants/thresholds from final_simulation.rkt and rep logic from app.py for fidelity.
+
+### Phase 2: Data Layer
+EDN lazy-loader (core.async fetch/cache to IndexedDB by unit-lesson, ~6KB/load from curriculum.json transformation); Vega-Lite renderer with hybrid pre-compute (CLJS for regression/R²/confidence on low-power via mean/deviations/slope formulas, yielding limited-depth steps (3-5 max) in tooltips for non-interactive static charts; auto-transform for simple bars/hists). Pre-compute outputs layered specs (e.g., point + line for scatter).
+
+Decision logic: EDN modularity (from 1.6MB JSON via curriculum_to_edn_flexible.py) enables 96% load reduction, with async to avoid UI blocks; pre-compute (86% faster, <25ms) controls perf on constrained hardware, exposing steps in tooltips for pedagogy without clutter—matches AP precision (3 decimals) and minimizes Vega thread-blocking; hybrid (auto for simple, pre for complex) detects via hardwareConcurrency for adaptability; rendering patterns extracted from allUnitsData.js inform Vega specs.
+
+### Phase 3: Synchronization
+QR scanner (jsQR on camera stream, core.async loop for chunk reassembly/hash validation); delta calc (filter txns/blocks > peer-timestamp + Merkle root of chain hash, <500 bytes via Transit/gzip). 4-level merge: ID conflicts (rep-weighted, pubkey lex tiebreak); timestamp clusters (1s windows, resolve within); logical (latest per-student); forks (longest + hybrid rep weight: 40% sum proposers, 40% height-decay at 0.95 base, 20% consensus strength + diversity bonus up to 10%).
+
+Decision logic: Delta minimizes QR scans (1-2 per sync); multi-level resolution fixes original overwrite bug (same-ms IDs from app.py:245 dict), ensuring zero loss—rep weighting prioritizes quality, timestamp clustering handles skew, latest-wins allows learning flexibility, hybrid forks balance merit/recency/collaboration (0.95 decay preserves foundations while emphasizing recent mastery, adaptive via chain length/phase for tuning); diversity bonus incentivizes peer involvement without gaming (rate-limits cap dominance); Merkle from delta extraction ensures integrity.
+
+### Phase 4: User Interface
+Reactive components via Reagent/Re-frame: Quiz (prompt/choices/Vega chart, submit dispatches txn/proposal); dashboard (rep display with histogram subs, minimal consensus logs like "Bonus for 33% challenge"). No animations/interactivity beyond essential (static charts, tooltips for steps).
+
+Decision logic: Re-frame subscriptions enable real-time views (e.g., :my-rep) without polling, scaling to virtual multi-node sims; minimal UI deprioritizes gaming (e.g., no streaks) for pedagogical focus—tooltips provide transparency (resolutions/bonuses) without perf cost; static renders ensure <100ms on low-power.
+
+### Phase 5: Testing & Optimization
+Unit tests (cljs.test per ns, e.g., rep calc on mock scenarios); integration (full cycles with virtual nodes); perf (heap snapshots, load times); offline (QR merge validation). Optimization: Shadow release for minification/tree-shake; sim validation (>90% accuracy match to Racket from final_simulation.rkt/simulation_results.md).
+
+Decision logic: Daily checkpoints in dev ensure metrics (e.g., <7-day sim latency); tests cover edges (identical timestamps, forks) for robustness; optimizations target constraints (e.g., cap replay depth at 50 for sorts).
+
+## Critical Implementation Details
+Node archetypes: {:aces {:acc 0.95 :part 0.90}, ...} from final_simulation.rkt for sim realism. Tx schema: {:id uuid :ts js/Date :pubkey str :qid str :type kw :payload {:answer str :hash sha256}} from app.py extraction. Block: {:hash sha256-txns :txns vec :type kw :ts num :proposer str} from schemas. Separate participation metrics (attempts, initiative) from rep for balanced incentives.
+
+Decision logic: Archetypes from Racket ensure varied sim behaviors; schemas preserve immutability for merges; decoupled metrics recognize effort without diluting accuracy-based rep, aligning with "correct thought leadership" philosophy (bonuses only for matching final hash per app.py:215).
+
+## External Teacher Tools
+Python script for QR gen (Transit/gzip chunks to PNGs/GIFs, external to app for complexity control).
+
+Decision logic: Offloads generation to teacher (preps lessons/deltas offline), keeping app student-focused; chunking fits QR limits while enabling animation for usability.
+
+## Deployment Configuration
+Shadow-cljs.edn with browser target, advanced opts for <5MB release; single index.html deploy.
+
+Decision logic: Minimizes footprint for school distribution (USB/email); no runtime deps ensures firewall compat.
+
+## Testing Strategy
+Units for pure fns (e.g., prop calc edges); integration for cycles/forks; perf on low-spec VMs; offline for QR merges/loss prevention.
+
+Decision logic: Comprehensive coverage validates refinements (e.g., no-loss resolution, pre-compute speed) against original sims from final_simulation.rkt/simulation_results.md.
+
+## Common Pitfalls to Avoid
+Synchronous ops (use core.async); full loads (lazy EDN); unvalidated merges (Merkle + multi-level resolution); over-interactivity (static charts); non-deterministic ties (pubkey/hash tiebreaks).
+
+Decision logic: Pitfalls target low-power/decentralization risks, informed by codebase bugs (e.g., overwrite on same-ts from app.py:245).
+
+## Success Checklist
+- [ ] Rep calc matches Racket (accuracy-conditional, strict < filter).
+- [ ] Lesson load <100ms (~6KB).
+- [ ] QR merge zero-loss (4-level resolution).
+- [ ] Bundle <5MB.
+- [ ] Consensus >90% in sims.
+- [ ] Smooth on 4GB Chromebook (pre-compute Vega).
+- [ ] No post-deploy deps.
+- [ ] Teacher QR gen works.
+- [ ] Students mine via answers.
+- [ ] Attestation yields consensus.

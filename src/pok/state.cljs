@@ -549,6 +549,11 @@
                         :lessons (:lessons unit)}])
                     (:units curriculum-index))))))
 
+(rf/reg-sub
+  ::user-progress
+  (fn [db [_ pubkey]]
+    (get-in db [:nodes pubkey :progress] 0)))
+
 ;; Curriculum loading events
 
 (rf/reg-event-fx

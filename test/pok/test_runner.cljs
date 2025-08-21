@@ -1,5 +1,5 @@
 (ns pok.test-runner
-  "Test runner for all PoK blockchain tests (Phases 1-3)"
+  "Test runner for all PoK blockchain tests (Phases 1-4)"
   (:require [cljs.test :as test]
             [pok.consensus-test]
             [pok.curriculum-test]
@@ -8,7 +8,8 @@
             [pok.reputation-test]
             [pok.qr-test]
             [pok.delta-test]
-            [pok.sync-test]))
+            [pok.sync-test]
+            [pok.ui-test]))
 
 (defn run-all-tests []
   "Runs all test suites"
@@ -19,7 +20,8 @@
                   'pok.reputation-test
                   'pok.qr-test
                   'pok.delta-test
-                  'pok.sync-test))
+                  'pok.sync-test
+                  'pok.ui-test))
 
 (defn run-phase3-tests []
   "Runs Phase 3 synchronization tests only"
@@ -37,6 +39,10 @@
   (test/run-tests 'pok.curriculum-test
                   'pok.phase2-test
                   'pok.renderer-test))
+
+(defn run-ui-tests []
+  "Runs Phase 4 UI component tests"
+  (test/run-tests 'pok.ui-test))
 
 ;; Run all tests when this namespace is loaded
 (run-all-tests)

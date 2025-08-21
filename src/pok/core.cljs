@@ -9,6 +9,7 @@
             [pok.renderer :as renderer]
             [pok.qr :as qr]
             [pok.delta :as delta]
+            [pok.ui :as ui]
             [clojure.core.async :as async :refer [go <!]]))
 
 (defn init-phase2-data-layer
@@ -43,26 +44,21 @@
 (defonce root (rdom/create-root (.getElementById js/document "app")))
 
 (defn mount-root
-  "Placeholder mount function - UI components will be implemented in Phase 4"
+  "Mount the main UI application with Phase 4 components"
   []
-  (rdom/render root [:div 
-                     [:h1 "PoK Chain - Phase 3 Complete"]
-                     [:p "Synchronization Layer: QR scanning and delta merging implemented"]
-                     [:div#chart-container "Chart rendering area"]
-                     [:div#curriculum-status "Curriculum status area"]
-                     [:div#sync-status "Synchronization status area"]
-                     [:div#qr-scanner "QR scanner area (Phase 4 UI pending)"]]))
+  (rdom/render root [ui/main-app]))
 
 (defn ^:export init
   "Application initialization function"
   []
   (rf/dispatch-sync [::state/initialize-db])
-  (mount-root)
   ;; Initialize Phase 2 data layer
   (init-phase2-data-layer)
   ;; Initialize Phase 3 sync layer
   (init-phase3-sync-layer)
-  (js/console.log "PoK Chain Phase 3 initialized - Synchronization layer ready"))
+  ;; Mount Phase 4 UI
+  (mount-root)
+  (js/console.log "PoK Chain Phase 4 initialized - User Interface layer ready"))
 
 ;; Development helpers for REPL testing
 
@@ -365,8 +361,40 @@
   
   (js/console.log "=== Phase 3 Demo Complete ==="))
 
+(defn demo-phase4-features
+  "Demonstrates Phase 4 UI components with sample data"
+  []
+  (js/console.log "=== Phase 4 Demo ===")
+  
+  ;; Set up test user and sample lesson
+  (create-test-node "test-user" :diligent)
+  
+  ;; Test lesson loading
+  (rf/dispatch [::state/load-lesson "unit1" "lesson1"])
+  
+  ;; Test chart preparation
+  (let [sample-chart {:type :scatter
+                      :data [{:x 1 :y 2} {:x 2 :y 4} {:x 3 :y 6}]
+                      :x-field :x
+                      :y-field :y}]
+    (rf/dispatch [::state/prepare-chart "test-q1" sample-chart]))
+  
+  ;; Test answer submission
+  (rf/dispatch [::state/submit-answer "test-q1" "option-a"])
+  
+  ;; Log UI state
+  (go
+    (<! (async/timeout 100))
+    (js/console.log "Current lesson:" @(rf/subscribe [::state/current-lesson]))
+    (js/console.log "Current user:" @(rf/subscribe [::state/current-user]))
+    (js/console.log "Loading states:" 
+                    {:lesson-loading? @(rf/subscribe [::state/lesson-loading?])
+                     :chart-loading? @(rf/subscribe [::state/chart-loading?])}))
+  
+  (js/console.log "=== Phase 4 Demo Complete ==="))
+
 (defn demo-all-features
-  "Demonstrates all implemented features (Phases 1-3)"
+  "Demonstrates all implemented features (Phases 1-4)"
   []
   (js/console.log "=== Complete Feature Demo ===")
   
@@ -382,6 +410,10 @@
   ;; Phase 3: Synchronization
   (js/console.log "--- Phase 3: Synchronization ---")
   (demo-phase3-features)
+  
+  ;; Phase 4: User Interface
+  (js/console.log "--- Phase 4: User Interface ---")
+  (demo-phase4-features)
   
   (js/console.log "=== All Features Demo Complete ==="))
 
@@ -405,4 +437,6 @@
                       :testForkResolution test-fork-resolution
                       :testSyncEvents test-sync-events
                       :demoPhase3 demo-phase3-features
+                      ;; Phase 4 exports
+                      :demoPhase4 demo-phase4-features
                       :demoAll demo-all-features})

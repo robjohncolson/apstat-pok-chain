@@ -11,10 +11,29 @@
         :output-dir "public/js"
         :asset-path "/js"
         :modules {:main {:init-fn pok.core/init}}
-        :dev {:compiler-options {:closure-defines {"re_frame.trace.trace_enabled_QMARK_" true}}}
-        :release {:compiler-options {:optimizations :advanced
+        :dev {:compiler-options {:closure-defines {"re_frame.trace.trace_enabled_QMARK_" true}
+                               :source-map true
+                               :optimizations :none}}
+        :release {:compiler-options {:optimizations :simple
                                    :pretty-print false
-                                   :pseudo-names false}}}
+                                   :source-map false}}}
   :test {:target :node-test
          :output-to "public/js/test.js"
-         :autorun true}}}}
+         :autorun true
+         :compiler-options {:optimizations :simple
+                          :target :nodejs}}
+  :performance {:target :browser
+               :output-dir "public/js/performance"
+               :asset-path "/js/performance"
+               :modules {:perf {:init-fn pok.performance/run-performance-test-suite}}
+               :compiler-options {:optimizations :advanced
+                                :pretty-print false
+                                :source-map false
+                                :elide-asserts true}}
+  :simulation {:target :browser
+              :output-dir "public/js/simulation"
+              :asset-path "/js/simulation"
+              :modules {:sim {:init-fn pok.simulation/run-validation-suite}}
+              :compiler-options {:optimizations :simple
+                               :pretty-print true
+                               :source-map true}}}}}

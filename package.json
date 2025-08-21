@@ -7,7 +7,14 @@
     "build": "shadow-cljs release app",
     "repl": "shadow-cljs cljs-repl app",
     "lint": "clj-kondo --lint src",
-    "test": "shadow-cljs compile test && node public/js/test.js"
+    "test": "shadow-cljs compile test && node public/js/test.js",
+    "test-watch": "shadow-cljs watch test",
+    "performance": "shadow-cljs compile performance",
+    "simulation": "shadow-cljs compile simulation",
+    "phase5": "shadow-cljs compile test && node public/js/test.js && shadow-cljs compile performance && shadow-cljs compile simulation",
+    "build-production": "scripts/build-production.bat",
+    "clean": "rm -rf public/js/ .shadow-cljs/",
+    "serve": "cd public && python -m http.server 8000"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",

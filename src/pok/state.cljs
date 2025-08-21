@@ -42,6 +42,8 @@
      :chart-specs {}              ; question-id -> vega-lite spec cache
      :network-stats {}            ; consensus health metrics
      :sync-history []             ; QR sync operations
+     :sync {:current-delta nil    ; current delta for QR generation
+            :peer-timestamps {}}   ; last known timestamps from peers
      :ui {:loading? false
           :error nil
           :modal nil
@@ -196,7 +198,104 @@
             (rep/process-attestation-rewards attestations final-hash nodes))))
       {:db db})))
 
-;; Synchronization events
+;; Phase 3: QR Synchronization events
+
+(rf/reg-event-fx
+  ::start-qr-scan
+  (fn [{:keys [db]} [_ video-element canvas-element expected-merkle-root]]
+    (let [scan-id (str "scan-" (js/Date.now))]
+      {:db (-> db
+               (assoc-in [:ui :qr-scanning?] true)
+               (assoc-in [:ui :scan-id] scan-id)
+               (assoc-in [:ui :scan-progress] {:type :initializing}))
+       :fx [[:dispatch [::perform-qr-scan-async video-element canvas-element expected-merkle-root scan-id]]]})))
+
+(rf/reg-event-fx
+  ::perform-qr-scan-async
+  (fn [{:keys [db]} [_ video-element canvas-element expected-merkle-root scan-id]]
+    ;; This would integrate with pok.qr namespace
+    (go
+      (let [qr-ns (-> (js/require "pok.qr") .-qr) ; Require QR namespace
+            scan-result (<! (.scan-qr-delta qr-ns video-element canvas-element expected-merkle-root))]
+        (rf/dispatch [::qr-scan-completed scan-id scan-result])))
+    {:db db}))
+
+(rf/reg-event-fx
+  ::qr-scan-completed
+  (fn [{:keys [db]} [_ _scan-id scan-result]]
+    (if (:success scan-result)
+      {:db (-> db
+               (assoc-in [:ui :qr-scanning?] false)
+               (assoc-in [:ui :scan-progress] {:type :completed}))
+       :fx [[:dispatch [::process-scanned-delta (:delta scan-result)]]]}
+      {:db (-> db
+               (assoc-in [:ui :qr-scanning?] false)
+               (assoc-in [:ui :error] (str "QR scan failed: " (:error scan-result))))})))
+
+(rf/reg-event-fx
+  ::process-scanned-delta
+  (fn [{:keys [db]} [_ delta-payload]]
+    {:db (assoc-in db [:ui :processing-delta?] true)
+     :fx [[:dispatch [::merge-delta-async delta-payload]]]}))
+
+(rf/reg-event-fx
+  ::merge-delta-async
+  (fn [{:keys [db]} [_ delta-payload]]
+    (go
+      (let [delta-ns (-> (js/require "pok.delta") .-delta) ; Require delta namespace
+            merge-result (<! (.merge-peer-delta delta-ns db delta-payload))]
+        (rf/dispatch [::delta-merge-completed merge-result])))
+    {:db db}))
+
+(rf/reg-event-db
+  ::delta-merge-completed
+  (fn [db [_ merge-result]]
+    (if (:success merge-result)
+      (-> (:state merge-result) ; Use the merged state
+          (assoc-in [:ui :processing-delta?] false)
+          (assoc-in [:ui :last-sync] {:timestamp (js/Date.now)
+                                      :status :success
+                                      :source :qr-scan}))
+      (-> db
+          (assoc-in [:ui :processing-delta?] false)
+          (assoc-in [:ui :error] (str "Delta merge failed: " (:error merge-result)))))))
+
+(rf/reg-event-fx
+  ::create-sync-delta
+  (fn [{:keys [db]} [_ peer-timestamp]]
+    {:db (assoc-in db [:ui :creating-delta?] true)
+     :fx [[:dispatch [::create-delta-async peer-timestamp]]]}))
+
+(rf/reg-event-fx
+  ::create-delta-async
+  (fn [{:keys [db]} [_ peer-timestamp]]
+    (go
+      (let [delta-ns (-> (js/require "pok.delta") .-delta) ; Require delta namespace
+            delta-result (<! (.create-sync-delta delta-ns db peer-timestamp))]
+        (rf/dispatch [::sync-delta-created delta-result])))
+    {:db db}))
+
+(rf/reg-event-db
+  ::sync-delta-created
+  (fn [db [_ delta-result]]
+    (-> db
+        (assoc-in [:ui :creating-delta?] false)
+        (assoc-in [:sync :current-delta] delta-result)
+        (assoc-in [:ui :delta-ready?] (:success delta-result)))))
+
+(rf/reg-event-db
+  ::cancel-qr-scan
+  (fn [db _]
+    (-> db
+        (assoc-in [:ui :qr-scanning?] false)
+        (assoc-in [:ui :scan-progress] nil))))
+
+(rf/reg-event-db
+  ::update-scan-progress
+  (fn [db [_ progress-data]]
+    (assoc-in db [:ui :scan-progress] progress-data)))
+
+;; Legacy sync events (maintained for backward compatibility)
 
 (rf/reg-event-db
   ::sync-with-peer
@@ -342,6 +441,63 @@
   ::lesson-loading?
   (fn [db _]
     (get-in db [:ui :lesson-loading?] false)))
+
+;; Phase 3: QR Synchronization subscriptions
+
+(rf/reg-sub
+  ::qr-scanning?
+  (fn [db _]
+    (get-in db [:ui :qr-scanning?] false)))
+
+(rf/reg-sub
+  ::scan-progress
+  (fn [db _]
+    (get-in db [:ui :scan-progress])))
+
+(rf/reg-sub
+  ::processing-delta?
+  (fn [db _]
+    (get-in db [:ui :processing-delta?] false)))
+
+(rf/reg-sub
+  ::creating-delta?
+  (fn [db _]
+    (get-in db [:ui :creating-delta?] false)))
+
+(rf/reg-sub
+  ::delta-ready?
+  (fn [db _]
+    (get-in db [:ui :delta-ready?] false)))
+
+(rf/reg-sub
+  ::current-delta
+  (fn [db _]
+    (get-in db [:sync :current-delta])))
+
+(rf/reg-sub
+  ::sync-history
+  (fn [db _]
+    (:sync-history db [])))
+
+(rf/reg-sub
+  ::last-sync
+  (fn [db _]
+    (get-in db [:ui :last-sync])))
+
+(rf/reg-sub
+  ::sync-statistics
+  :<- [::sync-history]
+  (fn [sync-history _]
+    (let [successful-syncs (filter #(= (:status %) :success) sync-history)
+          failed-syncs (filter #(= (:status %) :failed) sync-history)]
+      {:total-syncs (count sync-history)
+       :successful-syncs (count successful-syncs)
+       :failed-syncs (count failed-syncs)
+       :success-rate (if (pos? (count sync-history))
+                      (/ (count successful-syncs) (count sync-history))
+                      0.0)
+       :last-success (when (seq successful-syncs)
+                      (:timestamp (last successful-syncs)))})))
 
 ;; Chart subscriptions
 

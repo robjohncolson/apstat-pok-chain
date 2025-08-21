@@ -1,0 +1,269 @@
+# APStat PoK Chain - Comprehensive .gitignore
+
+# =============================================================================
+# Shadow-cljs & ClojureScript Build Artifacts
+# =============================================================================
+/.shadow-cljs/
+/public/js/
+/target/
+/.cpcache/
+/resources/public/js/
+/out/
+/classes/
+
+# =============================================================================
+# Node.js & NPM
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+.pnp.*
+.yarn/
+package-lock.json
+yarn.lock
+
+# =============================================================================
+# Java & Clojure
+# =============================================================================
+*.class
+*.jar
+*.war
+*.ear
+/.lein-*
+/.nrepl-*
+.repl
+pom.xml.asc
+/.deps.clj
+.cljcache/
+
+# clj-kondo (Clojure linter)
+.clj-kondo/.cache/
+
+# LSP (Language Server Protocol) cache
+.lsp/.cache/
+
+# =============================================================================
+# IDE & Editor Files
+# =============================================================================
+
+# IntelliJ IDEA / Cursive
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Eclipse
+.metadata
+.recommenders/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.classpath
+.project
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# Development & Runtime Files
+# =============================================================================
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# =============================================================================
+# Testing & QA
+# =============================================================================
+/test-results/
+/.nyc_output/
+coverage/
+*.lcov
+
+# =============================================================================
+# Deployment & Distribution
+# =============================================================================
+/dist/
+/build/
+/release/
+
+# =============================================================================
+# Local Development
+# =============================================================================
+
+# Local configuration
+config/local.edn
+config/dev.edn
+profiles.clj
+
+# Temporary files
+/tmp/
+/temp/
+*.tmp
+*.temp
+
+# Database files (if using local dev db)
+*.db
+*.sqlite
+*.sqlite3
+
+# =============================================================================
+# Project-Specific Files
+# =============================================================================
+
+# Generated curriculum files (until Phase 2 implementation)
+/resources/edn/
+!/resources/edn/.gitkeep
+
+# Development data
+/dev-resources/
+/test-data/
+
+# Performance profiling
+*.prof
+*.hprof
+
+# Shadow-cljs specific
+/.shadow-cljs/
+/public/js/cljs-runtime/
+
+# =============================================================================
+# Security & Secrets
+# =============================================================================
+*.pem
+*.key
+*.crt
+*.p12
+secrets.edn
+credentials.edn
+
+# =============================================================================
+# Backup Files
+# =============================================================================
+*.backup
+*.bak
+*.orig
+
+# =============================================================================
+# Archive Files
+# =============================================================================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Keep empty directories that are important for project structure
+!.gitkeep

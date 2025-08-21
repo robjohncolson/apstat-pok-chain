@@ -1,0 +1,19 @@
+{
+  "name": "apstat-pok-chain",
+  "version": "1.0.0",
+  "description": "ClojureScript-based Proof-of-Knowledge blockchain for AP Statistics education",
+  "scripts": {
+    "dev": "shadow-cljs watch app",
+    "build": "shadow-cljs release app",
+    "repl": "shadow-cljs cljs-repl app"
+  },
+  "dependencies": {
+    "shadow-cljs": "^2.25.8",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "qrcode": "^1.5.3",
+    "jsqr": "^1.4.0",
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {}
+}

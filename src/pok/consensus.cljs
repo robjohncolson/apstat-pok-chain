@@ -106,8 +106,6 @@
    Checks both quorum size and convergence threshold for mining eligibility."
   [completion-txn all-transactions active-node-count curriculum-size]
   (let [question-id (:question-id completion-txn)
-        attestations (get-attestations-for-question all-transactions question-id)
-        
         ;; Calculate required quorum (dynamic and progressive)
         dynamic-quorum (calculate-dynamic-quorum active-node-count)
         progress-quorum (calculate-progressive-quorum 

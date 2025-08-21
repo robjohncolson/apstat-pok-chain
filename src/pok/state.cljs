@@ -2,9 +2,11 @@
   "Re-frame state management for PoK blockchain application.
    Manages nodes, chains, mempools, and consensus state with immutable updates."
   (:require [re-frame.core :as rf]
-            [clojure.core.async :as async :refer [go]]
+            [clojure.core.async :as async :refer [go <!]]
             [pok.reputation :as rep]
-            [pok.consensus :as consensus]))
+            [pok.consensus :as consensus]
+            [pok.curriculum :as curriculum]
+            [pok.renderer :as renderer]))
 
 ;; Schema definitions based on app_state.json and foundational architecture
 
@@ -33,13 +35,18 @@
   (fn [_ _]
     {:nodes {}                    ; pubkey -> node-map
      :current-user nil            ; current user pubkey
-     :curriculum []               ; loaded curriculum questions
+     :curriculum-index nil        ; curriculum structure index
+     :loaded-lessons {}           ; lesson-key -> lesson-data cache
      :active-question nil         ; currently displayed question
+     :current-lesson nil          ; currently loaded lesson
+     :chart-specs {}              ; question-id -> vega-lite spec cache
      :network-stats {}            ; consensus health metrics
      :sync-history []             ; QR sync operations
      :ui {:loading? false
           :error nil
-          :modal nil}}))
+          :modal nil
+          :lesson-loading? false
+          :chart-loading? false}}))
 
 ;; Node management events
 
@@ -302,12 +309,237 @@
   (fn [db _]
     (:active-question db)))
 
+;; Curriculum subscriptions
+
+(rf/reg-sub
+  ::curriculum-index
+  (fn [db _]
+    (:curriculum-index db)))
+
+(rf/reg-sub
+  ::current-lesson
+  (fn [db _]
+    (:current-lesson db)))
+
+(rf/reg-sub
+  ::loaded-lessons
+  (fn [db _]
+    (:loaded-lessons db)))
+
+(rf/reg-sub
+  ::lesson-loaded?
+  (fn [db [_ unit-id lesson-id]]
+    (let [lesson-key (str unit-id "/" lesson-id)]
+      (contains? (:loaded-lessons db) lesson-key))))
+
+(rf/reg-sub
+  ::lesson-data
+  (fn [db [_ unit-id lesson-id]]
+    (let [lesson-key (str unit-id "/" lesson-id)]
+      (get-in db [:loaded-lessons lesson-key]))))
+
+(rf/reg-sub
+  ::lesson-loading?
+  (fn [db _]
+    (get-in db [:ui :lesson-loading?] false)))
+
+;; Chart subscriptions
+
+(rf/reg-sub
+  ::chart-spec
+  (fn [db [_ question-id]]
+    (get-in db [:chart-specs question-id])))
+
+(rf/reg-sub
+  ::chart-statistics
+  (fn [db [_ question-id]]
+    (get-in db [:chart-specs question-id :stats])))
+
+(rf/reg-sub
+  ::current-question-chart
+  :<- [::active-question]
+  :<- [::chart-spec]
+  (fn [[active-question chart-spec] _]
+    (when active-question
+      (get chart-spec (:id active-question)))))
+
+(rf/reg-sub
+  ::chart-loading?
+  (fn [db _]
+    (get-in db [:ui :chart-loading?] false)))
+
+(rf/reg-sub
+  ::available-lessons
+  :<- [::curriculum-index]
+  (fn [curriculum-index _]
+    (when curriculum-index
+      (mapcat (fn [unit]
+                (map (fn [lesson]
+                       {:unit-id (:id unit)
+                        :lesson-id (:id lesson)
+                        :unit-name (:name unit)
+                        :lesson-name (:name lesson)})
+                     (:lessons unit)))
+              (:units curriculum-index)))))
+
+(rf/reg-sub
+  ::lessons-by-unit
+  :<- [::curriculum-index]
+  (fn [curriculum-index _]
+    (when curriculum-index
+      (into {} (map (fn [unit]
+                      [(:id unit) 
+                       {:unit unit
+                        :lessons (:lessons unit)}])
+                    (:units curriculum-index))))))
+
+;; Curriculum loading events
+
+(rf/reg-event-fx
+  ::load-curriculum-index
+  (fn [{:keys [db]} _]
+    {:db (assoc-in db [:ui :loading?] true)
+     :fx [[:dispatch [::load-curriculum-index-async]]]}))
+
+(rf/reg-event-fx
+  ::load-curriculum-index-async
+  (fn [{:keys [db]} _]
+    (go
+      (let [result (<! (curriculum/load-curriculum-index))]
+        (if (:success result)
+          (rf/dispatch [::curriculum-index-loaded (:data result)])
+          (rf/dispatch [::set-error (str "Failed to load curriculum index: " (:error result))]))))
+    {:db db}))
+
+(rf/reg-event-db
+  ::curriculum-index-loaded
+  (fn [db [_ curriculum-index]]
+    (-> db
+        (assoc :curriculum-index curriculum-index)
+        (assoc-in [:ui :loading?] false))))
+
+(rf/reg-event-fx
+  ::load-lesson
+  (fn [{:keys [db]} [_ unit-id lesson-id]]
+    (let [lesson-key (str unit-id "/" lesson-id)]
+      (if (get-in db [:loaded-lessons lesson-key])
+        ;; Lesson already loaded
+        {:db (assoc db :current-lesson (get-in db [:loaded-lessons lesson-key]))}
+        ;; Load lesson asynchronously
+        {:db (assoc-in db [:ui :lesson-loading?] true)
+         :fx [[:dispatch [::load-lesson-async unit-id lesson-id]]]}))))
+
+(rf/reg-event-fx
+  ::load-lesson-async
+  (fn [{:keys [db]} [_ unit-id lesson-id]]
+    (go
+      (let [result (<! (curriculum/load-lesson unit-id lesson-id))
+            lesson-key (str unit-id "/" lesson-id)]
+        (if (:success result)
+          (rf/dispatch [::lesson-loaded lesson-key (:data result)])
+          (rf/dispatch [::set-error (str "Failed to load lesson: " (:error result))]))))
+    {:db db}))
+
+(rf/reg-event-db
+  ::lesson-loaded
+  (fn [db [_ lesson-key lesson-data]]
+    (-> db
+        (assoc-in [:loaded-lessons lesson-key] lesson-data)
+        (assoc :current-lesson lesson-data)
+        (assoc-in [:ui :lesson-loading?] false))))
+
+(rf/reg-event-fx
+  ::preload-lessons
+  (fn [{:keys [db]} [_ lesson-specs]]
+    {:db (assoc-in db [:ui :loading?] true)
+     :fx [[:dispatch [::preload-lessons-async lesson-specs]]]}))
+
+(rf/reg-event-fx
+  ::preload-lessons-async
+  (fn [{:keys [db]} [_ lesson-specs]]
+    (go
+      (let [results (<! (curriculum/load-multiple-lessons lesson-specs))]
+        (rf/dispatch [::lessons-preloaded results])))
+    {:db db}))
+
+(rf/reg-event-db
+  ::lessons-preloaded
+  (fn [db [_ results]]
+    (let [successful-loads (into {} (filter #(get-in (second %) [:success]) results))
+          lesson-data (into {} (map (fn [[key result]] [key (:data result)]) successful-loads))]
+      (-> db
+          (update :loaded-lessons merge lesson-data)
+          (assoc-in [:ui :loading?] false)))))
+
+;; Chart rendering events
+
+(rf/reg-event-fx
+  ::prepare-chart
+  (fn [{:keys [db]} [_ question-id chart-data]]
+    (if (curriculum/validate-chart-data chart-data)
+      {:db (assoc-in db [:ui :chart-loading?] true)
+       :fx [[:dispatch [::prepare-chart-async question-id chart-data]]]}
+      {:db db
+       :fx [[:dispatch [::set-error "Invalid chart data structure"]]]})))
+
+(rf/reg-event-fx
+  ::prepare-chart-async
+  (fn [{:keys [db]} [_ question-id chart-data]]
+    (try
+      (let [vega-spec (renderer/create-chart-spec chart-data)
+            chart-stats (renderer/get-chart-statistics chart-data)]
+        (rf/dispatch [::chart-prepared question-id vega-spec chart-stats]))
+      (catch js/Error e
+        (rf/dispatch [::set-error (str "Chart preparation failed: " e)])))
+    {:db db}))
+
+(rf/reg-event-db
+  ::chart-prepared
+  (fn [db [_ question-id vega-spec chart-stats]]
+    (-> db
+        (assoc-in [:chart-specs question-id] {:spec vega-spec :stats chart-stats})
+        (assoc-in [:ui :chart-loading?] false))))
+
+(rf/reg-event-fx
+  ::render-chart
+  (fn [{:keys [db]} [_ question-id element-id]]
+    (let [chart-spec (get-in db [:chart-specs question-id])]
+      (if chart-spec
+        {:fx [[:dispatch [::render-chart-async question-id element-id (:spec chart-spec)]]]}
+        {:fx [[:dispatch [::set-error "Chart specification not found"]]]}))))
+
+(rf/reg-event-fx
+  ::render-chart-async
+  (fn [{:keys [db]} [_ question-id element-id vega-spec]]
+    (go
+      (let [result (<! (renderer/render-chart-to-element element-id vega-spec))]
+        (if (:success result)
+          (rf/dispatch [::chart-rendered question-id])
+          (rf/dispatch [::set-error (str "Chart rendering failed: " (:error result))]))))
+    {:db db}))
+
+(rf/reg-event-db
+  ::chart-rendered
+  (fn [db [_ question-id]]
+    (js/console.log "Chart rendered successfully:" question-id)
+    db))
+
 ;; UI events
 
 (rf/reg-event-db
   ::set-loading
   (fn [db [_ loading?]]
     (assoc-in db [:ui :loading?] loading?)))
+
+(rf/reg-event-db
+  ::set-lesson-loading
+  (fn [db [_ loading?]]
+    (assoc-in db [:ui :lesson-loading?] loading?)))
+
+(rf/reg-event-db
+  ::set-chart-loading
+  (fn [db [_ loading?]]
+    (assoc-in db [:ui :chart-loading?] loading?)))
 
 (rf/reg-event-db
   ::set-error
@@ -323,6 +555,11 @@
   ::set-active-question
   (fn [db [_ question]]
     (assoc db :active-question question)))
+
+(rf/reg-event-db
+  ::set-current-lesson
+  (fn [db [_ lesson]]
+    (assoc db :current-lesson lesson)))
 
 ;; Initialize default database
 (defonce initialized?

@@ -5,15 +5,20 @@
   "scripts": {
     "dev": "shadow-cljs watch app",
     "build": "shadow-cljs release app",
-    "repl": "shadow-cljs cljs-repl app"
+    "repl": "shadow-cljs cljs-repl app",
+    "lint": "clj-kondo --lint src",
+    "test": "shadow-cljs compile test && node public/js/test.js"
   },
   "dependencies": {
-    "shadow-cljs": "^2.25.8",
+    "crypto-js": "^4.2.0",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "qrcode": "^1.5.3",
-    "jsqr": "^1.4.0",
-    "crypto-js": "^4.2.0"
+    "shadow-cljs": "^2.25.8",
+    "vega-lite": "^5.6.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "clj-kondo": "^2025.7.28"
+  }
 }

@@ -281,38 +281,25 @@
 (defn lesson-selector
   "Component for selecting lessons from the curriculum."
   []
-  (let [curriculum-index @(rf/subscribe [::state/curriculum-index])
-        lessons-by-unit @(rf/subscribe [::state/lessons-by-unit])
-        current-lesson @(rf/subscribe [::state/current-lesson])
-        loading? @(rf/subscribe [::state/lesson-loading?])]
-    
+  (let [curriculum-index @(rf/subscribe [::state/curriculum-index])]
     [:div.lesson-selector
      [:h4 "Select Lesson"]
-     
-     (if loading?
-       [:div.loading "Loading lessons..."]
-       
-       (if curriculum-index
-         [:div.curriculum-browser
-          (doall
-            (map (fn [[unit-id unit-data]]
-                   ^{:key unit-id}
-                   [:div.unit-section
-                    [:h5.unit-title (:name (:unit unit-data))]
-                    [:div.lessons-list
-                     (doall
-                       (map (fn [lesson]
-                              ^{:key (:id lesson)}
-                              [:button.lesson-btn
-                               {:class (when (and current-lesson 
-                                                  (= (:id current-lesson) (:id lesson))) 
-                                         "active")
-                                :on-click #(rf/dispatch [::state/load-lesson unit-id (:id lesson)])}
-                               (:name lesson)])
-                            (:lessons unit-data)))]])
-                 lessons-by-unit))]
-         
-         [:div.no-curriculum "No curriculum available"]))]))
+     (if curriculum-index
+       [:div.curriculum-browser
+        [:p (str "Found " (count (:units curriculum-index)) " units")]
+        (for [unit (:units curriculum-index)]
+          ^{:key (:id unit)}
+          [:div.unit-section
+           [:h5.unit-title (clojure.string/replace (:id unit) "unit-" "Unit ")]
+           [:div.lessons-list
+            (for [lesson-id (:lessons unit)]
+              ^{:key lesson-id}
+              [:button.lesson-btn
+               {:on-click #(rf/dispatch [::state/load-lesson 
+                                         (clojure.string/replace (:id unit) "unit-" "")
+                                         (clojure.string/replace lesson-id "lesson-" "")])}
+               (clojure.string/replace lesson-id "lesson-" "Lesson ")])]])]
+       [:div.no-curriculum "No curriculum loaded"])]))
 
 ;; Main UI Components Registration Events
 

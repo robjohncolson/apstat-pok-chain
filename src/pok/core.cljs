@@ -16,7 +16,14 @@
   "Initialize Phase 2 data layer components"
   []
   ;; Load curriculum index on startup
+  (js/console.log "Initializing curriculum loading...")
   (rf/dispatch [::state/load-curriculum-index])
+  
+  ;; Add debug logging after a delay to check state
+  (js/setTimeout 
+    #(let [curriculum @(rf/subscribe [::state/curriculum-index])]
+       (js/console.log "Curriculum index after load attempt:" (clj->js curriculum)))
+    2000)
   
   ;; Log device performance for optimization
   (js/console.log "Device performance level:" 

@@ -565,16 +565,23 @@
 (rf/reg-event-fx
   ::load-curriculum-index-async
   (fn [{:keys [db]} _]
+    (js/console.log "Starting async curriculum index load...")
     (go
       (let [result (<! (curriculum/load-curriculum-index))]
+        (js/console.log "Curriculum index load result:" (clj->js result))
         (if (:success result)
-          (rf/dispatch [::curriculum-index-loaded (:data result)])
-          (rf/dispatch [::set-error (str "Failed to load curriculum index: " (:error result))]))))
+          (do
+            (js/console.log "Dispatching curriculum-index-loaded with data:" (clj->js (:data result)))
+            (rf/dispatch [::curriculum-index-loaded (:data result)]))
+          (do
+            (js/console.error "Curriculum index load failed:" (:error result))
+            (rf/dispatch [::set-error (str "Failed to load curriculum index: " (:error result))])))))
     {:db db}))
 
 (rf/reg-event-db
   ::curriculum-index-loaded
   (fn [db [_ curriculum-index]]
+    (js/console.log "curriculum-index-loaded event triggered with:" (clj->js curriculum-index))
     (-> db
         (assoc :curriculum-index curriculum-index)
         (assoc-in [:ui :loading?] false))))

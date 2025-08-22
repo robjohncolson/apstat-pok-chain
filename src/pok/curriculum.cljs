@@ -1,7 +1,8 @@
 (ns pok.curriculum
   "Curriculum data loader with async EDN loading and IndexedDB caching.
    Implements lazy loading of ~6KB lessons with cache-first strategy for performance."
-  (:require [clojure.core.async :as async :refer [go >! chan]]))
+  (:require [clojure.core.async :as async :refer [go >! chan]]
+            [cljs.reader :as reader]))
 
 ;; Device performance detection
 (defn detect-device-performance
@@ -34,39 +35,93 @@
        (vector? (:data chart-data))
        (#{:bar :scatter :histogram :line} (:type chart-data))))
 
-;; Stub implementations for compilation
-(defn load-lesson
-  "Stub implementation for lesson loading"
-  [_unit-id _lesson-id]
+;; EDN file loading utilities using fetch API
+(defn load-edn-file
+  "Loads an EDN file asynchronously via fetch API"
+  [file-path]
   (let [result-chan (chan)]
-    (go (>! result-chan {:success false :error "Implementation pending"}))
+    (js/console.log "Loading EDN file:" file-path)
+    (-> (js/fetch file-path)
+        (.then (fn [response]
+                 (if (.-ok response)
+                   (.text response)
+                   (throw (js/Error. (str "HTTP " (.-status response) ": " (.-statusText response)))))))
+        (.then (fn [text]
+                 (js/console.log "EDN file loaded, content length:" (.-length text))
+                 (try
+                   (let [data (reader/read-string text)]
+                     (js/console.log "EDN parsed successfully")
+                     (go (>! result-chan {:success true :data data})))
+                   (catch js/Error e
+                     (js/console.error "EDN parsing error:" e)
+                     (go (>! result-chan {:success false :error (str "Parse error: " e)}))))))
+        (.catch (fn [error]
+                  (js/console.error "Fetch error:" error)
+                  (go (>! result-chan {:success false :error (str "Network error: " error)})))))
     result-chan))
 
+;; Curriculum loading implementations
 (defn load-curriculum-index
-  "Stub implementation for curriculum index loading"
+  "Load curriculum index from resources/edn/index.edn"
   []
+  (js/console.log "load-curriculum-index called")
   (let [result-chan (chan)]
-    (go (>! result-chan {:success false :error "Implementation pending"}))
+    (go
+      (js/console.log "Starting to load index.edn file...")
+      (let [index-result (<! (load-edn-file "/resources/edn/index.edn"))]
+        (js/console.log "Index file load result:" (clj->js index-result))
+        (if (:success index-result)
+          (>! result-chan {:success true :data (:data index-result)})
+          (>! result-chan {:success false :error (:error index-result)}))))
+    result-chan))
+
+(defn load-lesson
+  "Load a specific lesson by unit and lesson ID"
+  [unit-id lesson-id]
+  (let [result-chan (chan)
+        filename (str "unit-" unit-id "-lesson-" lesson-id ".edn")
+        file-path (str "/resources/edn/" filename)]
+    (go
+      (let [lesson-result (<! (load-edn-file file-path))]
+        (if (:success lesson-result)
+          (>! result-chan {:success true :data (:data lesson-result)})
+          (>! result-chan {:success false :error (:error lesson-result)}))))
     result-chan))
 
 (defn load-multiple-lessons
-  "Stub implementation for batch lesson loading"
-  [_lesson-specs]
+  "Batch load multiple lessons"
+  [lesson-specs]
   (let [result-chan (chan)]
-    (go (>! result-chan {}))
+    (go
+      (let [load-results (<! (async/map vector 
+                                        (mapv (fn [{:keys [unit-id lesson-id]}]
+                                                (load-lesson unit-id lesson-id))
+                                              lesson-specs)))]
+        (>! result-chan 
+            (into {} (map-indexed (fn [idx result]
+                                    [(str (:unit-id (nth lesson-specs idx)) 
+                                          "/" (:lesson-id (nth lesson-specs idx)))
+                                     result])
+                                  load-results)))))
     result-chan))
 
+;; Cache management (simplified for now - future IndexedDB integration)
 (defn clear-cache
-  "Stub implementation for cache clearing"
+  "Clear curriculum cache"
   []
   (let [result-chan (chan)]
-    (go (>! result-chan false))
+    (go 
+      ;; For now, just return success - implement IndexedDB clearing later
+      (>! result-chan true))
     result-chan))
 
 (defn get-cache-stats
-  "Stub implementation for cache statistics"
+  "Get cache statistics"
   []
   (let [result-chan (chan)]
-    (go (>! result-chan {:cache-enabled false
-                         :device-performance (detect-device-performance)}))
+    (go 
+      (>! result-chan {:cache-enabled false
+                       :device-performance (detect-device-performance)
+                       :lessons-cached 0
+                       :cache-size 0}))
     result-chan))

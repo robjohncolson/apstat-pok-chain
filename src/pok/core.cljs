@@ -48,6 +48,59 @@
   (js/console.log "QR chunk size limit:" qr/max-chunk-size "bytes")
   (js/console.log "Fork decay factor:" delta/fork-decay-factor))
 
+;; PHASE 9 PROTOTYPE: Monitoring infrastructure
+(defonce monitoring-state (atom {:consensus-events []
+                                :reputation-events []
+                                :performance-metrics []
+                                :error-log []
+                                :session-start (js/Date.now)}))
+
+(defn log-consensus-event
+  "PROTOTYPE: Logs consensus events for monitoring and analysis."
+  [event-type question-id consensus-data]
+  (let [event {:timestamp (js/Date.now)
+               :type event-type
+               :question-id question-id
+               :consensus-strength (:consensus-strength consensus-data)
+               :participants (:participants consensus-data)
+               :dominant-answer (:dominant-answer consensus-data)}]
+    (swap! monitoring-state update :consensus-events conj event)
+    (js/console.log "Consensus Event:" (clj->js event))))
+
+(defn log-reputation-event
+  "PROTOTYPE: Logs reputation calculation events for monitoring."
+  [pubkey old-rep new-rep bonus-applied]
+  (let [event {:timestamp (js/Date.now)
+               :pubkey pubkey
+               :old-reputation old-rep
+               :new-reputation new-rep
+               :change (- new-rep old-rep)
+               :bonus-applied bonus-applied}]
+    (swap! monitoring-state update :reputation-events conj event)
+    (js/console.log "Reputation Event:" (clj->js event))))
+
+(defn log-performance-metric
+  "PROTOTYPE: Logs performance metrics for optimization tracking."
+  [metric-type value details]
+  (let [event {:timestamp (js/Date.now)
+               :metric metric-type
+               :value value
+               :details details}]
+    (swap! monitoring-state update :performance-metrics conj event)
+    (when (> value 100) ; Warn on operations > 100ms
+      (js/console.warn "Performance Warning:" (clj->js event)))))
+
+(defn export-monitoring-data
+  "PROTOTYPE: Exports monitoring data for offline analysis."
+  []
+  (let [data @monitoring-state
+        session-duration (- (js/Date.now) (:session-start data))
+        export-data (assoc data :session-duration session-duration
+                                :export-timestamp (js/Date.now))]
+    (js/console.log "Exporting monitoring data:" (clj->js export-data))
+    ;; In a real implementation, this could save to IndexedDB or create downloadable file
+    export-data))
+
 (defonce root (rdom/create-root (.getElementById js/document "app")))
 
 (defn mount-root

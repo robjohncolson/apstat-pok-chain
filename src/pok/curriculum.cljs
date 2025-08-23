@@ -1,7 +1,7 @@
 (ns pok.curriculum
   "Curriculum data loader with async EDN loading and IndexedDB caching.
    Implements lazy loading of ~6KB lessons with cache-first strategy for performance."
-  (:require [clojure.core.async :as async :refer [go >! chan]]
+  (:require [clojure.core.async :as async :refer [go >! <! chan]]
             [cljs.reader :as reader]))
 
 ;; Device performance detection
@@ -103,6 +103,63 @@
                                           "/" (:lesson-id (nth lesson-specs idx)))
                                      result])
                                   load-results)))))
+    result-chan))
+
+;; PHASE 9 PROTOTYPE: Multi-subject curriculum generalization
+(defn detect-curriculum-subject
+  "Detects curriculum subject from index metadata for multi-subject support."
+  [index-data]
+  (let [subject-hints (:subject index-data)
+        unit-patterns (map :id (:units index-data))]
+    (cond
+      subject-hints subject-hints
+      (some #(re-find #"stat|data|probability" (str %)) unit-patterns) :ap-statistics
+      (some #(re-find #"calc|derivative|integral" (str %)) unit-patterns) :ap-calculus
+      (some #(re-find #"bio|cell|genetics" (str %)) unit-patterns) :ap-biology
+      (some #(re-find #"chem|molecular|atomic" (str %)) unit-patterns) :ap-chemistry
+      :else :unknown)))
+
+(defn load-subject-specific-index
+  "PROTOTYPE: Load curriculum index with subject-aware path resolution."
+  [subject-id]
+  (let [result-chan (chan)
+        base-path (case subject-id
+                    :ap-statistics "/resources/edn/index.edn"
+                    :ap-calculus "/resources/edn/calculus/index.edn"
+                    :ap-biology "/resources/edn/biology/index.edn"
+                    :ap-chemistry "/resources/edn/chemistry/index.edn"
+                    "/resources/edn/index.edn")] ; Default fallback
+    (go
+      (let [index-result (<! (load-edn-file base-path))]
+        (if (:success index-result)
+          (let [detected-subject (detect-curriculum-subject (:data index-result))]
+            (>! result-chan {:success true 
+                            :data (:data index-result)
+                            :detected-subject detected-subject
+                            :requested-subject subject-id}))
+          (>! result-chan {:success false :error (:error index-result)}))))
+    result-chan))
+
+(defn generalize-lesson-loader
+  "PROTOTYPE: Generalized lesson loader supporting multiple curriculum structures."
+  [subject-id unit-id lesson-id]
+  (let [result-chan (chan)
+        subject-path (case subject-id
+                       :ap-statistics ""
+                       :ap-calculus "calculus/"
+                       :ap-biology "biology/"
+                       :ap-chemistry "chemistry/"
+                       "")
+        filename (str "unit-" unit-id "-lesson-" lesson-id ".edn")
+        file-path (str "/resources/edn/" subject-path filename)]
+    (go
+      (let [lesson-result (<! (load-edn-file file-path))]
+        (if (:success lesson-result)
+          (>! result-chan {:success true 
+                          :data (:data lesson-result)
+                          :subject subject-id
+                          :path file-path})
+          (>! result-chan {:success false :error (:error lesson-result)}))))
     result-chan))
 
 ;; Cache management (simplified for now - future IndexedDB integration)

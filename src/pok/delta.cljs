@@ -6,6 +6,7 @@
             [goog.crypt :as crypt]
             [goog.crypt.Sha256]
             [clojure.walk]
+            [clojure.set]
             [pok.reputation :as rep]
             [pok.consensus :as consensus]))
 
@@ -220,7 +221,7 @@
                   :diversity-bonus diversity-bonus
                   :rate-penalty (:rate-penalty diversity-result)
                   :diversity-metrics diversity-result}
-     :fork-height fork-height})))
+     :fork-height fork-height}))
 
 (defn resolve-fork-conflicts
   "Resolves blockchain forks using hybrid reputation + height + consensus weighting."
@@ -357,6 +358,85 @@
       {:success true :state updated-state})
     (catch js/Error e
       {:success false :error (str "Delta merge error: " e)})))
+
+;; PHASE 9 PROTOTYPE: Federated network cross-chain merge mechanisms
+(defn detect-chain-compatibility
+  "PROTOTYPE: Detects chain compatibility for cross-class federation."
+  [local-chain external-chain]
+  (let [local-subjects (set (map #(get-in % [:metadata :subject]) local-chain))
+        external-subjects (set (map #(get-in % [:metadata :subject]) external-chain))
+        common-subjects (clojure.set/intersection local-subjects external-subjects)
+        
+        local-versions (set (map #(get-in % [:metadata :protocol-version]) local-chain))
+        external-versions (set (map #(get-in % [:metadata :protocol-version]) external-chain))]
+    
+    {:compatible? (and (seq common-subjects) 
+                      (seq (clojure.set/intersection local-versions external-versions)))
+     :common-subjects common-subjects
+     :version-compatibility (clojure.set/intersection local-versions external-versions)
+     :risk-factors {:subject-mismatch (empty? common-subjects)
+                   :version-mismatch (empty? (clojure.set/intersection local-versions external-versions))
+                   :chain-length-disparity (> (Math/abs (- (count local-chain) 
+                                                          (count external-chain))) 10)}}))
+
+(defn create-federated-merge-proposal
+  "PROTOTYPE: Creates merge proposal for cross-class chain federation."
+  [local-state external-chain-state class-id]
+  (let [local-chains (map :chain (vals (:nodes local-state)))
+        external-chains (map :chain (vals (:nodes external-chain-state)))
+        
+        compatibility-matrix (for [local-chain local-chains
+                                  external-chain external-chains]
+                               (detect-chain-compatibility local-chain external-chain))
+        
+        compatible-pairs (filter :compatible? compatibility-matrix)
+        merge-timestamp (js/Date.now)]
+    
+    (if (seq compatible-pairs)
+      {:success true
+       :proposal {:merge-type :federated-cross-class
+                 :source-class class-id
+                 :timestamp merge-timestamp
+                 :compatible-chains (count compatible-pairs)
+                 :merge-strategy :reputation-weighted-validation
+                 :risk-assessment (apply merge 
+                                        (map :risk-factors compatibility-matrix))
+                 :estimated-conflicts (apply + (map #(Math/abs 
+                                                      (- (count (first %)) 
+                                                         (count (second %))))
+                                                   compatible-pairs))}}
+      {:success false
+       :error "No compatible chains found for federation"
+       :diagnostics {:local-chains (count local-chains)
+                    :external-chains (count external-chains)
+                    :compatibility-issues (map :risk-factors compatibility-matrix)}})))
+
+(defn simulate-federated-consensus
+  "PROTOTYPE: Simulates federated consensus across multiple class networks."
+  [class-states question-id]
+  (let [all-attestations (mapcat (fn [state]
+                                  (let [all-txns (mapcat #(concat (:mempool %) 
+                                                                 (mapcat :txns (:chain %)))
+                                                        (vals (:nodes state)))]
+                                    (filter #(= (:question-id %) question-id) all-txns)))
+                                class-states)
+        
+        federated-convergence (frequencies (map :answer all-attestations))
+        total-weight (count all-attestations)
+        consensus-threshold 0.6 ; 60% threshold for federated consensus
+        
+        dominant-answer (first (apply max-key val federated-convergence))
+        dominant-weight (get federated-convergence dominant-answer 0)
+        consensus-strength (/ dominant-weight total-weight)]
+    
+    {:federated-consensus? (>= consensus-strength consensus-threshold)
+     :dominant-answer dominant-answer
+     :consensus-strength consensus-strength
+     :participating-classes (count class-states)
+     :total-attestations total-weight
+     :distribution federated-convergence
+     :cross-validation {:required-threshold consensus-threshold
+                       :achieved-consensus (>= consensus-strength consensus-threshold)}}))
 
 ;; Statistics and debugging
 (defn analyze-delta-composition

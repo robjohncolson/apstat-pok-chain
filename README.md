@@ -247,9 +247,136 @@ This implementation exceeds the [foundational architecture](foundational-archite
 - **Bundle size**: ✅ <5MB production build achieved
 - **Educational alignment**: ✅ Full AP Statistics curriculum support
 
+## Phase 9: Extensibility and Future Vectors
+
+### Multi-Subject Curriculum Support
+
+The PoK blockchain architecture supports generalization beyond AP Statistics:
+
+#### Subject Detection and Indexing
+- **Automatic subject detection**: Pattern matching on curriculum structure
+- **Subject-specific paths**: Modular EDN organization (e.g., `/resources/edn/calculus/`)
+- **Cross-subject compatibility**: Unified lesson loading interface
+
+#### Supported Extension Subjects
+- **AP Calculus**: Derivative/integral content with mathematical proofs
+- **AP Biology**: Cell biology, genetics with lab-based attestations  
+- **AP Chemistry**: Molecular structures with formula validation
+- **Custom subjects**: Teacher-defined curricula via EDN schema
+
+#### Implementation Pattern
+```clojure
+;; Load subject-specific curriculum
+(curriculum/load-subject-specific-index :ap-calculus)
+
+;; Generalized lesson loading  
+(curriculum/generalize-lesson-loader :ap-biology "cell-division" "meiosis")
+```
+
+### Federated Network Capabilities
+
+#### Cross-Class Chain Federation
+- **Chain compatibility detection**: Subject/version matching algorithms
+- **Federated consensus**: Inter-class question validation (60% threshold)
+- **Reputation cross-validation**: Merit transfer between compatible networks
+
+#### Risk Assessment Framework
+- **Subject mismatch detection**: Automated compatibility warnings
+- **Protocol version validation**: Prevents incompatible merges  
+- **Chain length disparity limits**: Prevents overwhelming small classes
+
+#### Federation Protocols
+```clojure
+;; Create cross-class merge proposal
+(delta/create-federated-merge-proposal local-state external-state "class-b")
+
+;; Simulate federated consensus
+(delta/simulate-federated-consensus [class-a-state class-b-state] "question-42")
+```
+
+### Monitoring and Analytics
+
+#### Real-time Monitoring
+- **Consensus event tracking**: Question-level convergence analysis
+- **Reputation trajectory monitoring**: Student progress visualization  
+- **Performance metrics**: Operation timing and optimization insights
+
+#### Offline Analysis Support
+- **Session data export**: Comprehensive analytics for teachers
+- **Performance warnings**: Automatic alerts for degraded operations (>100ms)
+- **Educational insights**: Learning progression analytics
+
+#### Monitoring Implementation
+```clojure
+;; Log consensus events
+(core/log-consensus-event :convergence "stat-regression" consensus-data)
+
+;; Export monitoring data  
+(core/export-monitoring-data) ; Downloads comprehensive session analytics
+```
+
+### Security and Validation
+
+#### Proof-of-Knowledge Integrity
+- **Multi-level conflict resolution**: ID, timestamp, logical, and fork-based
+- **Merkle root validation**: Delta integrity verification
+- **Reputation-weighted validation**: Quality-based conflict resolution
+
+#### Educational Safeguards
+- **Gaming prevention**: Accuracy-conditional rewards only
+- **Participation tracking**: Decoupled from reputation scores
+- **Teacher override capability**: AP reveal 10x weighting
+
+### Deployment Extensibility
+
+#### Distribution Methods
+- **Multi-environment support**: USB, network, email deployment
+- **Curriculum modularity**: Subject-specific bundle generation
+- **Teacher tool integration**: QR generation for multi-subject content
+
+#### Scalability Considerations
+- **Hardware adaptability**: Performance scaling based on device capabilities
+- **Network topology flexibility**: Classroom, school, district federation
+- **Storage optimization**: Lazy loading with ~6KB lesson modules
+
+### Future Research Vectors
+
+#### Advanced Consensus Mechanisms
+- **Byzantine fault tolerance**: Enhanced resistance to malicious actors
+- **Adaptive quorum sizing**: Dynamic adjustment based on class engagement
+- **Cross-subject knowledge synthesis**: Inter-disciplinary learning validation
+
+#### Machine Learning Integration
+- **Learning pattern recognition**: Adaptive curriculum sequencing
+- **Misconception detection**: Automatic identification of common errors
+- **Personalized learning paths**: AI-driven content recommendation
+
+#### Blockchain Innovation
+- **Zero-knowledge proofs**: Privacy-preserving attestation validation  
+- **Sharding mechanisms**: Scalability for large-scale deployments
+- **Interoperability protocols**: Cross-platform educational standards
+
+### Risk Assessment and Mitigation
+
+#### Technical Risks
+- **Chain bloat**: Automated pruning and archival mechanisms
+- **Synchronization overhead**: Optimized delta compression (<500 bytes)
+- **Device compatibility**: Progressive enhancement for low-spec hardware
+
+#### Educational Risks  
+- **Over-gamification**: Emphasis on accuracy over speed/quantity
+- **Social pressure**: Anonymous attestation options
+- **Technology dependence**: Fallback to traditional assessment methods
+
+#### Deployment Risks
+- **Network restrictions**: Tested offline-first architecture
+- **Teacher training**: Comprehensive documentation and support tools
+- **Curriculum alignment**: Standards-compliant content validation
+
 ## References
 
 - [ADR-012: Social Consensus and Proof-of-Knowledge](adr/012-social-consensus-and-proof-of-knowledge.md)
 - [ADR-028: Emergent Attestation with Optional Reveals](adr/028-emergent-attestation-with-optional-reveals.md)  
 - [Foundational Architecture](foundational-architecture.txt)
 - [Simulation Results](simulation_results.md)
+- [Phase 9 Exploration Report](PHASE9-EXPLORATION.md)

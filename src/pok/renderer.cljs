@@ -137,6 +137,14 @@
            (contains? attachments :x-labels)
            (contains? attachments :series))))
 
+(defn validate-table-attachments
+  "Validates EDN attachment structure for table rendering."
+  [attachments]
+  (and (map? attachments)
+       (contains? attachments :table)
+       (vector? (:table attachments))
+       (> (count (:table attachments)) 0)))
+
 (defn series-to-chart-data
   "Converts series-based chart format to Vega data structure."
   [x-labels series chart-type]
@@ -414,6 +422,132 @@
                                  :error (str "Exception: " e)
                                  :render-time (- (js/Date.now) start-time)
                                  :element-id element-id}))))
+    result-chan))
+
+;; Table rendering functions
+
+(defn create-vega-table-spec
+  "Creates Vega-Lite table specification using text marks."
+  [table performance-level]
+  (when (and (vector? table) (> (count table) 0))
+    (let [headers (first table)
+          rows (rest table)
+          max-cols (count headers)
+          ;; Create data with row/col positions for grid layout
+          table-data (flatten
+                       (concat
+                         ;; Header row
+                         (map-indexed
+                           (fn [col-idx header]
+                             {:row 0 :col col-idx :text (str header) :type "header"})
+                           headers)
+                         ;; Data rows
+                         (map-indexed
+                           (fn [row-idx row]
+                             (map-indexed
+                               (fn [col-idx cell]
+                                 {:row (inc row-idx) :col col-idx :text (str cell) :type "data"})
+                               (take max-cols (concat row (repeat "")))))
+                           rows)))
+          optimized-data (optimize-data-for-device table-data performance-level)]
+      {:$schema "https://vega.github.io/schema/vega-lite/v5.json"
+       :width (* max-cols 80)
+       :height (* (inc (count rows)) 25)
+       :data {:values optimized-data}
+       :layer [
+         ;; Cell backgrounds
+         {:mark {:type "rect"
+                 :stroke "#e1e5e9"
+                 :strokeWidth 1}
+          :encoding {:x {:field :col :type "ordinal" :scale {:range "width"} :axis nil}
+                     :y {:field :row :type "ordinal" :scale {:range "height"} :axis nil}
+                     :fill {:field :type :type "nominal" 
+                            :scale {:domain ["header" "data"] 
+                                    :range ["#f8f9fa" "#ffffff"]}}}}
+         ;; Cell text
+         {:mark {:type "text"
+                 :align "center"
+                 :baseline "middle"
+                 :fontSize 12
+                 :fontWeight {:condition {:test "datum.type === 'header'" :value "bold"}
+                              :value "normal"}}
+          :encoding {:x {:field :col :type "ordinal" :scale {:range "width"} :axis nil}
+                     :y {:field :row :type "ordinal" :scale {:range "height"} :axis nil}
+                     :text {:field :text :type "nominal"}
+                     :color {:field :type :type "nominal"
+                             :scale {:domain ["header" "data"]
+                                     :range ["#2c3e50" "#333333"]}}}}]})))
+
+(defn render-table-to-element
+  "Renders table to DOM element with Vega or HTML fallback."
+  [element-id table-spec use-vega?]
+  (let [result-chan (chan)
+        start-time (js/Date.now)]
+    (go
+      (try
+        (js/console.log "Rendering table to element:" element-id)
+        (if-let [element (.getElementById js/document element-id)]
+          (if (and use-vega? table-spec)
+            (do
+              (js/console.log "Using Vega table rendering")
+              ;; Use Vega for table rendering
+              (.then (js/vegaEmbed element (clj->js table-spec) #js {:actions false})
+                     (fn [_result]
+                       (let [render-time (- (js/Date.now) start-time)]
+                         (js/console.log "Vega table rendered in" render-time "ms")
+                         (async/put! result-chan {:success true 
+                                                :render-time render-time 
+                                                :method "vega"
+                                                :element-id element-id})))
+                     (fn [error]
+                       (js/console.warn "Vega table failed, using HTML fallback:" error)
+                       ;; Fallback to HTML table
+                       (let [render-time (- (js/Date.now) start-time)]
+                         (async/put! result-chan {:success true
+                                                :render-time render-time
+                                                :method "html-fallback"
+                                                :element-id element-id
+                                                :fallback-reason (str error)})))))
+            (do
+              (js/console.log "Using HTML table rendering")
+              ;; HTML table rendering handled by UI component
+              (let [render-time (- (js/Date.now) start-time)]
+                (async/put! result-chan {:success true
+                                       :render-time render-time
+                                       :method "html"
+                                       :element-id element-id}))))
+          (async/put! result-chan {:success false 
+                                 :error (str "Element not found: " element-id)
+                                 :element-id element-id}))
+        (catch js/Error e
+          (js/console.error "Table rendering exception:" e)
+          (async/put! result-chan {:success false 
+                                 :error (str "Exception: " e)
+                                 :element-id element-id}))))
+    result-chan))
+
+(defn render-edn-table
+  "Renders table from EDN attachment data to DOM element."
+  [element-id attachments & {:keys [prefer-vega?] :or {prefer-vega? true}}]
+  (let [result-chan (chan)]
+    (go
+      (try
+        (if (validate-table-attachments attachments)
+          (let [table (:table attachments)
+                performance-level (detect-device-performance)
+                table-spec (when prefer-vega? 
+                            (create-vega-table-spec table performance-level))]
+            (js/console.log "Table data parsed, rows:" (count table) "cols:" (count (first table)))
+            (let [render-result (async/<! (render-table-to-element element-id table-spec prefer-vega?))]
+              (async/>! result-chan render-result)))
+          (async/>! result-chan {:success false 
+                                :error "Invalid table attachments structure"
+                                :element-id element-id}))
+        (catch js/Error e
+          (js/console.error "EDN table rendering exception:" e)
+          (async/>! result-chan {:success false 
+                                :error (str "Exception: " e)
+                                :element-id element-id}))))
     result-chan))
 
 ;; High-level chart rendering function for EDN attachments

@@ -8,6 +8,100 @@
             [pok.state :as state]
             [pok.renderer :as renderer]))
 
+;; Table Component with Vega and HTML Fallback
+
+(defn html-table-component
+  "Renders HTML table from EDN table data."
+  [table]
+  (when (and (vector? table) (> (count table) 0))
+    (let [headers (first table)
+          rows (rest table)]
+      [:div.table-wrapper
+       [:table.edn-table
+        [:thead
+         [:tr
+          (for [header headers]
+            ^{:key header}
+            [:th header])]]
+        [:tbody
+         (for [row-data rows]
+           ^{:key (str (hash row-data))}
+           [:tr
+            (for [cell row-data]
+              ^{:key (str (hash cell))}
+              [:td cell])])]]])))
+
+(defn table-component
+  "Renders EDN tables with Vega or HTML fallback."
+  [question-id attachments]
+  (let [table-state (r/atom {:loading true :error nil :render-time nil :method nil})
+        element-id (str "table-" question-id)
+        mounted? (r/atom false)]
+    
+    (r/create-class
+     {:component-did-mount
+      (fn [_this]
+        (reset! mounted? true)
+        (js/console.log "Table component mounted for question:" question-id)
+        (if-let [table (:table attachments)]
+          (do
+            (js/console.log "Table data found, rows:" (count table) "cols:" (count (first table)))
+            ;; Try Vega first, fallback to HTML
+            (js/setTimeout
+              (fn []
+                (when @mounted?
+                  (js/console.log "Attempting table render...")
+                  (go
+                    (let [render-result (<! (renderer/render-edn-table element-id attachments 
+                                                                      :prefer-vega? true))]
+                      (when @mounted?
+                        (js/console.log "Table render result:" (clj->js render-result))
+                        (swap! table-state assoc 
+                               :loading false
+                               :error (when-not (:success render-result) (:error render-result))
+                               :render-time (:render-time render-result)
+                               :method (:method render-result))
+                        (when (:success render-result)
+                          (js/console.log "Table rendered successfully via" (:method render-result) 
+                                         "in" (:render-time render-result) "ms")))))))
+              100)) ; Small delay for DOM readiness
+          (do
+            (js/console.log "No table data found")
+            (swap! table-state assoc :loading false :error "No table data"))))
+      
+      :component-will-unmount
+      (fn [_this]
+        (reset! mounted? false)
+        (js/console.log "Unmounting table component for question:" question-id))
+      
+      :reagent-render
+      (fn [_question-id attachments]
+        (let [table (:table attachments)]
+          [:div.table-container
+           (cond
+             (:loading @table-state)
+             [:div.table-loading "Loading table..."]
+             
+             (:error @table-state)
+             [:div.table-error
+              [:p "Table rendering error, using HTML fallback:"]
+              [html-table-component table]]
+             
+             (= (:method @table-state) "html")
+             [html-table-component table]
+             
+             (or (= (:method @table-state) "vega")
+                 (= (:method @table-state) "html-fallback"))
+             [:div.table-wrapper
+              [:div.table-display {:id element-id}]
+              (when (and (:method @table-state) (not= (:method @table-state) "html"))
+                [:div.table-perf-info
+                 [:small (str "Rendered via " (:method @table-state) " in " 
+                             (:render-time @table-state) "ms")]])]
+             
+             :else
+             [html-table-component table])]))})))
+
 ;; Chart Component with Vega-Lite Integration
 
 (defn chart-component
@@ -89,10 +183,16 @@
       [:h3.question-title (:prompt question-data)]
       [:p.question-id (str "Question ID: " (:id question-data))]]
      
-     ;; Vega chart display from EDN attachments (only when chart-type is specified)
+     ;; Render attachments: charts (when chart-type specified) or tables (when table data present)
      (when-let [attachments (:attachments question-data)]
-       (when (:chart-type attachments)
-         [chart-component (:id question-data) attachments]))
+       (cond
+         ;; Chart rendering (when chart-type is explicitly specified)
+         (:chart-type attachments)
+         [chart-component (:id question-data) attachments]
+         
+         ;; Table rendering (when table data present but no chart-type)
+         (:table attachments)
+         [table-component (:id question-data) attachments]))
      
      ;; Multiple choice options
      [:div.question-choices

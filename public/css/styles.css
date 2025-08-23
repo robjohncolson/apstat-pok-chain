@@ -593,6 +593,109 @@ body {
   }
 }
 
+/* Table styling */
+.table-container {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.table-loading, .table-error {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  padding: 1rem;
+}
+
+.table-wrapper {
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+  overflow: auto;
+  max-width: 100%;
+}
+
+.table-display {
+  min-height: 100px;
+  background: white;
+}
+
+/* HTML table fallback styling */
+.edn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.edn-table th {
+  background: #f8f9fa;
+  color: #2c3e50;
+  font-weight: 600;
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  border: 1px solid #e1e5e9;
+  vertical-align: middle;
+}
+
+.edn-table td {
+  padding: 0.5rem;
+  text-align: center;
+  border: 1px solid #e1e5e9;
+  vertical-align: middle;
+  color: #333;
+}
+
+.edn-table tbody tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+.edn-table tbody tr:hover {
+  background: #e3f2fd;
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
+  .table-wrapper {
+    overflow-x: auto;
+  }
+  
+  .edn-table {
+    font-size: 0.8rem;
+  }
+  
+  .edn-table th,
+  .edn-table td {
+    padding: 0.4rem 0.3rem;
+    min-width: 60px;
+  }
+}
+
+/* Table performance info */
+.table-perf-info {
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  text-align: right;
+}
+
+.table-perf-info small {
+  color: #6c757d;
+  font-size: 0.7rem;
+}
+
+/* Vega table integration */
+.table-display .vega-embed {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.table-display .vega-embed details {
+  display: none !important;
+}
+
 /* Print styles */
 @media print {
   .nav-buttons, .submit-btn, .start-lesson-btn {
@@ -601,5 +704,14 @@ body {
   
   .app-container {
     color: black;
+  }
+  
+  .edn-table {
+    border: 1px solid #000;
+  }
+  
+  .edn-table th,
+  .edn-table td {
+    border: 1px solid #000;
   }
 }

@@ -13,6 +13,8 @@
     "simulation": "shadow-cljs compile simulation",
     "phase5": "shadow-cljs compile test && node public/js/test.js && shadow-cljs compile performance && shadow-cljs compile simulation",
     "build-production": "scripts/build-production.bat",
+    "validate-bundle": "node scripts/validate-bundle.js",
+    "deploy-ready": "npm run build && npm run validate-bundle",
     "clean": "rm -rf public/js/ .shadow-cljs/",
     "serve": "cd public && python -m http.server 8000"
   },

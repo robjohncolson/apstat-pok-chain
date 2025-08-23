@@ -9,14 +9,16 @@
             [pok.reputation :as rep]
             [pok.consensus :as consensus]))
 
-;; Delta calculation constants from foundational architecture
+;; Delta calculation constants from foundational architecture (Phase 8 tuned)
 (def ^:const max-delta-size 500)        ; <500 bytes via Transit/gzip
 (def ^:const timestamp-cluster-window 1000) ; 1 second window for clustering
-(def ^:const fork-decay-factor 0.95)    ; 0.95 base for height decay
-(def ^:const fork-weight-proposer 0.4)  ; 40% weight for proposer reputation
-(def ^:const fork-weight-height 0.4)    ; 40% weight for height with decay
-(def ^:const fork-weight-consensus 0.2) ; 20% weight for consensus strength
-(def ^:const diversity-bonus-cap 0.1)   ; 10% maximum diversity bonus
+(def ^:const fork-decay-factor 0.95)    ; 0.95 base for height decay (Phase 8 confirmed)
+(def ^:const fork-weight-proposer 0.35) ; 35% weight for proposer reputation (Phase 8 tuned)
+(def ^:const fork-weight-height 0.35)   ; 35% weight for height with decay (Phase 8 tuned)
+(def ^:const fork-weight-consensus 0.30) ; 30% weight for consensus + diversity (Phase 8 tuned)
+(def ^:const diversity-bonus-cap 0.15)  ; 15% maximum diversity bonus (Phase 8 enhanced)
+(def ^:const proposer-rate-limit 5)     ; Maximum blocks per proposer per session
+(def ^:const diversity-threshold 3)     ; Minimum unique proposers for full diversity bonus
 
 ;; Delta payload schema
 (defn create-delta-payload
@@ -137,16 +139,37 @@
          student-question-groups)))
 
 ;; Level 4: Hybrid fork resolution with reputation, height decay, and diversity
+(defn calculate-proposer-rate-penalties
+  "Calculates rate-limiting penalties for proposers exceeding block limits."
+  [fork-blocks]
+  (let [proposer-counts (frequencies (map :proposer fork-blocks))
+        total-penalty (apply + (map (fn [[_proposer count]]
+                                     (if (> count proposer-rate-limit)
+                                       (* 0.1 (- count proposer-rate-limit)) ; 10% penalty per excess block
+                                       0.0))
+                                   proposer-counts))]
+    (min 0.5 total-penalty))) ; Cap penalty at 50%
+
 (defn calculate-fork-diversity-bonus
-  "Calculates diversity bonus based on unique contributors to fork."
+  "Calculates enhanced diversity bonus with rate-limiting and threshold requirements."
   [fork-blocks]
   (let [unique-proposers (set (map :proposer fork-blocks))
         proposer-count (count unique-proposers)
-        diversity-ratio (if (> proposer-count 1)
-                         (min diversity-bonus-cap 
-                              (/ (dec proposer-count) 10.0)) ; Scale by contributor diversity
-                         0.0)]
-    diversity-ratio))
+        rate-penalty (calculate-proposer-rate-penalties fork-blocks)
+        
+        ;; Enhanced diversity calculation
+        base-diversity (if (>= proposer-count diversity-threshold)
+                        (min diversity-bonus-cap 
+                             (* (/ proposer-count 10.0) diversity-bonus-cap))
+                        (* 0.5 diversity-bonus-cap (/ proposer-count diversity-threshold)))
+        
+        ;; Apply rate-limiting penalty
+        final-bonus (max 0.0 (- base-diversity rate-penalty))]
+    
+    {:diversity-bonus final-bonus
+     :rate-penalty rate-penalty
+     :unique-proposers proposer-count
+     :meets-threshold? (>= proposer-count diversity-threshold)}))
 
 (defn calculate-consensus-strength
   "Calculates consensus strength metric for fork evaluation."
@@ -182,9 +205,10 @@
                                                (Math/pow fork-decay-factor idx))
                                              fork-blocks)))
         
-        ;; Component 3: Consensus strength + diversity bonus (20%)
+        ;; Component 3: Consensus strength + diversity bonus (30% - Phase 8 enhanced)
         consensus-strength (calculate-consensus-strength fork-blocks all-transactions nodes)
-        diversity-bonus (calculate-fork-diversity-bonus fork-blocks)
+        diversity-result (calculate-fork-diversity-bonus fork-blocks)
+        diversity-bonus (:diversity-bonus diversity-result)
         consensus-weight (* fork-weight-consensus (+ consensus-strength diversity-bonus))
         
         total-weight (+ proposer-weight height-weight consensus-weight)]
@@ -193,8 +217,10 @@
      :components {:proposer proposer-weight
                   :height height-weight
                   :consensus consensus-weight
-                  :diversity-bonus diversity-bonus}
-     :fork-height fork-height}))
+                  :diversity-bonus diversity-bonus
+                  :rate-penalty (:rate-penalty diversity-result)
+                  :diversity-metrics diversity-result}
+     :fork-height fork-height})))
 
 (defn resolve-fork-conflicts
   "Resolves blockchain forks using hybrid reputation + height + consensus weighting."

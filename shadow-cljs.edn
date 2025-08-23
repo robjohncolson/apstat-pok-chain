@@ -14,9 +14,13 @@
         :dev {:compiler-options {:closure-defines {"re_frame.trace.trace_enabled_QMARK_" true}
                                :source-map true
                                :optimizations :none}}
-        :release {:compiler-options {:optimizations :simple
+        :release {:compiler-options {:optimizations :advanced
                                    :pretty-print false
-                                   :source-map false}}}
+                                   :source-map false
+                                   :elide-asserts true
+                                   :pseudo-names false
+                                   :print-input-delimiter false
+                                   :closure-warnings {:non-standard-jsdoc :off}}}}
   :test {:target :node-test
          :output-to "public/js/test.js"
          :autorun true

@@ -7,23 +7,29 @@
 (defn clamp [min-val val max-val]
   (max min-val (min val max-val)))
 
-;; Constants from foundational architecture
+;; Constants from foundational architecture (Phase 8 optimized)
 (def ^:const thought-leader-threshold 0.5)
 (def ^:const thought-leader-bonus 2.5)
 (def ^:const reputation-bounds [0.1 10.0])
+(def ^:const max-replay-depth 50)  ; Phase 8: Cap replay depth for performance
 
 ;; Core reputation calculation functions
 
 (defn calculate-proportion-before-attestation
   "Calculates the proportion of the winning answer at the time of attestation.
    Uses strict < timestamp filter to exclude self and later attestations.
-   Returns proportion of max_dist / total_count for determining thought leadership."
+   Phase 8: Caps replay depth to max-replay-depth for performance optimization."
   [attestations target-timestamp _target-hash]
   (let [;; Filter attestations strictly before target timestamp (excludes self)
         prior-attestations (filter #(< (:timestamp %) target-timestamp) attestations)
+        ;; Phase 8: Cap replay depth for performance (most recent attestations)
+        capped-attestations (if (> (count prior-attestations) max-replay-depth)
+                             (take-last max-replay-depth 
+                                       (sort-by :timestamp prior-attestations))
+                             prior-attestations)
         ;; Group by hash and count
-        hash-distribution (frequencies (map #(get-in % [:payload :hash]) prior-attestations))
-        total-count (count prior-attestations)
+        hash-distribution (frequencies (map #(get-in % [:payload :hash]) capped-attestations))
+        total-count (count capped-attestations)
         max-count (if (empty? hash-distribution) 0 (apply max (vals hash-distribution)))]
     (if (zero? total-count)
       0.0

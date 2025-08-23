@@ -4,7 +4,76 @@
   (:require [reagent.core :as r]
             [re-frame.core :as rf]
             [clojure.string]
-            [pok.state :as state]))
+            [clojure.core.async :as async :refer [go <!]]
+            [pok.state :as state]
+            [pok.renderer :as renderer]))
+
+;; Chart Component with Vega-Lite Integration
+
+(defn chart-component
+  "Renders Vega-Lite charts from EDN attachments with performance logging."
+  [question-id attachments]
+  (let [chart-state (r/atom {:loading true :error nil :render-time nil})
+        element-id (str "chart-" question-id)
+        mounted? (r/atom false)]
+    
+    (r/create-class
+     {:component-did-mount
+      (fn [_this]
+        (reset! mounted? true)
+        (js/console.log "Chart component mounted for question:" question-id)
+        (js/console.log "Attachments received:" (clj->js attachments))
+        (if attachments
+          (do
+            (js/console.log "Attachment keys:" (clj->js (keys attachments)))
+            (when (or (:table attachments) 
+                      (:chart-type attachments))
+              (js/console.log "Valid chart attachments detected...")
+              ;; Multiple attempts to ensure DOM is ready
+              (js/setTimeout
+                (fn []
+                  (when @mounted?
+                    (js/console.log "Attempting chart render - DOM should be ready...")
+                    (go
+                      (let [render-result (<! (renderer/render-edn-chart element-id attachments))]
+                        (when @mounted?  ; Check if still mounted
+                          (js/console.log "Chart render result:" (clj->js render-result))
+                          (swap! chart-state assoc 
+                                 :loading false
+                                 :error (when-not (:success render-result) (:error render-result))
+                                 :render-time (:render-time render-result))
+                          (when (:success render-result)
+                            (js/console.log "Chart rendered successfully in" 
+                                           (:render-time render-result) "ms")))))))
+                200))) ; Longer delay to ensure DOM is fully ready
+          (do
+            (js/console.log "No attachments found for question:" question-id)
+            (swap! chart-state assoc :loading false))))
+      
+      :component-will-unmount
+      (fn [_this]
+        (reset! mounted? false)
+        (js/console.log "Unmounting chart component for question:" question-id))
+      
+      :reagent-render
+      (fn [_question-id _attachments]
+        [:div.chart-container
+         [:div.chart-wrapper
+          [:div.chart-display {:id element-id}]
+          (cond
+            (:loading @chart-state)
+            [:div.chart-loading "Loading chart..."]
+            
+            (:error @chart-state)
+            [:div.chart-error 
+             [:p "Chart rendering failed"]
+             [:details
+              [:summary "Error details"]
+              [:pre (:error @chart-state)]]]
+            
+            (:render-time @chart-state)
+            [:div.chart-perf-info
+             [:small (str "Rendered in " (:render-time @chart-state) "ms")]])]])})))
 
 ;; UI Component: Quiz Question Display
 
@@ -13,8 +82,6 @@
    Dispatches to Phase 1 blockchain logic on answer submission."
   [question-data]
   (let [current-user @(rf/subscribe [::state/current-user])
-        chart-spec @(rf/subscribe [::state/chart-spec (:id question-data)])
-        loading? @(rf/subscribe [::state/chart-loading?])
         selected-answer (r/atom nil)]
     
     [:div.question-container
@@ -22,16 +89,10 @@
       [:h3.question-title (:prompt question-data)]
       [:p.question-id (str "Question ID: " (:id question-data))]]
      
-     ;; Static Vega chart display (from Phase 2 renderer)
-     (when (:chart question-data)
-       [:div.chart-container
-        (if loading?
-          [:div.chart-loading "Loading chart..."]
-          (if chart-spec
-            [:div.chart-display
-             {:id (str "chart-" (:id question-data))}
-             "Chart will render here"] ; Placeholder for Vega-Lite chart
-            [:div.chart-error "Chart not available"]))])
+     ;; Vega chart display from EDN attachments (only when chart-type is specified)
+     (when-let [attachments (:attachments question-data)]
+       (when (:chart-type attachments)
+         [chart-component (:id question-data) attachments]))
      
      ;; Multiple choice options
      [:div.question-choices

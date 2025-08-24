@@ -183,16 +183,28 @@
       [:h3.question-title (:prompt question-data)]
       [:p.question-id (str "Question ID: " (:id question-data))]]
      
-     ;; Render attachments: charts (when chart-type specified) or tables (when table data present)
+           ;; Render attachments: charts (when chart-type specified) or tables (when table data present)
      (when-let [attachments (:attachments question-data)]
+       (js/console.log "DIAGNOSTIC: Question attachments found:" (clj->js attachments))
+       (js/console.log "DIAGNOSTIC: Chart-type present?" (boolean (:chart-type attachments)))
+       (js/console.log "DIAGNOSTIC: Table present?" (boolean (:table attachments)))
        (cond
          ;; Chart rendering (when chart-type is explicitly specified)
          (:chart-type attachments)
-         [chart-component (:id question-data) attachments]
+         (do
+           (js/console.log "DIAGNOSTIC: Rendering chart component for question" (:id question-data))
+           [chart-component (:id question-data) attachments])
          
          ;; Table rendering (when table data present but no chart-type)
          (:table attachments)
-         [table-component (:id question-data) attachments]))
+         (do
+           (js/console.log "DIAGNOSTIC: Rendering table component for question" (:id question-data))
+           [table-component (:id question-data) attachments])
+         
+         :else
+         (do
+           (js/console.log "DIAGNOSTIC: No valid attachments found for rendering")
+           nil)))
      
      ;; Multiple choice options
      [:div.question-choices

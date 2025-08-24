@@ -68,7 +68,17 @@
 (rf/reg-event-db
   ::set-current-user
   (fn [db [_ pubkey]]
+    (js/console.log "DIAGNOSTIC: Setting current user to:" pubkey)
     (assoc db :current-user pubkey)))
+
+(rf/reg-event-db
+  ::create-user-profile
+  (fn [db [_ pubkey archetype]]
+    (js/console.log "DIAGNOSTIC: Creating user profile - pubkey:" pubkey "archetype:" archetype)
+    (rf/dispatch [::add-node pubkey archetype])
+    (let [final-db (assoc db :current-user pubkey)]
+      (js/console.log "DIAGNOSTIC: User profile created successfully")
+      final-db)))
 
 (rf/reg-event-db
   ::update-node-reputation

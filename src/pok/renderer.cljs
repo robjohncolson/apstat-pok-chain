@@ -131,11 +131,19 @@
 (defn validate-edn-attachments
   "Validates EDN attachment structure for chart rendering."
   [attachments]
-  (and (map? attachments)
-       (contains? attachments :chart-type)  ; Only render charts when explicitly requested
-       (or (contains? attachments :table)
-           (contains? attachments :x-labels)
-           (contains? attachments :series))))
+  (js/console.log "DIAGNOSTIC: Validating EDN attachments:" (clj->js attachments))
+  (let [is-map? (map? attachments)
+        has-chart-type? (contains? attachments :chart-type)
+        has-data? (or (contains? attachments :table)
+                     (contains? attachments :x-labels)
+                     (contains? attachments :series))
+        result (and is-map? has-chart-type? has-data?)]
+    (js/console.log "DIAGNOSTIC: Validation results:" 
+                   "is-map?" is-map?
+                   "has-chart-type?" has-chart-type?
+                   "has-data?" has-data?
+                   "final-result?" result)
+    result))
 
 (defn validate-table-attachments
   "Validates EDN attachment structure for table rendering."

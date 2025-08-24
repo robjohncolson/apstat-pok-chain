@@ -62,16 +62,23 @@
 (defn scan-qr-from-canvas
   "Scans QR code from canvas image data using jsQR library."
   [canvas-context]
+  (js/console.log "DIAGNOSTIC: QR scan attempt on canvas context:" canvas-context)
   (try
     (let [canvas (.-canvas canvas-context)
           width (.-width canvas)
           height (.-height canvas)
           image-data (.getImageData canvas-context 0 0 width height)
           qr-result (js/jsQR (.-data image-data) width height)]
+      (js/console.log "DIAGNOSTIC: QR scan result:" qr-result)
       (if qr-result
-        {:success true :data (.-data qr-result)}
-        {:success false :error "No QR code detected"}))
+        (do
+          (js/console.log "DIAGNOSTIC: QR code detected successfully:" (.-data qr-result))
+          {:success true :data (.-data qr-result)})
+        (do
+          (js/console.log "DIAGNOSTIC: No QR code detected in image")
+          {:success false :error "No QR code detected"})))
     (catch js/Error e
+      (js/console.error "DIAGNOSTIC: QR scan error:" e)
       {:success false :error (str "Scan error: " e)})))
 
 (defn setup-video-canvas
